@@ -24,7 +24,10 @@ def test_init_without_api_key():
 
 @pytest.mark.asyncio
 async def test_get_arrivals_success():
-    """Test getting bus arrivals successfully."""
+    """Test getting bus arrivals successfully with destination from last stop."""
+    from pathlib import Path
+    from pymta.gtfs_static import GTFSCache
+
     # Create a GTFS-RT FeedMessage
     feed_message = gtfs_realtime_pb2.FeedMessage()
     feed_message.header.gtfs_realtime_version = "2.0"
@@ -37,11 +40,14 @@ async def test_get_arrivals_success():
     trip_update = entity.trip_update
     trip_update.trip.route_id = "M15"
 
-    # Add stop time update for the future
-    stop_time = trip_update.stop_time_update.add()
-    stop_time.stop_id = "400561"
-    future_time = datetime.now(timezone.utc).timestamp() + 300  # 5 minutes from now
-    stop_time.arrival.time = int(future_time)
+    # Add stop time updates - bus passes through 400561 and ends at 400999
+    stop_time1 = trip_update.stop_time_update.add()
+    stop_time1.stop_id = "400561"
+    stop_time1.arrival.time = int(datetime.now(timezone.utc).timestamp() + 300)
+
+    stop_time2 = trip_update.stop_time_update.add()
+    stop_time2.stop_id = "400999"  # Last stop - South Ferry
+    stop_time2.arrival.time = int(datetime.now(timezone.utc).timestamp() + 900)
 
     # Mock response
     mock_response = AsyncMock()
@@ -54,8 +60,16 @@ async def test_get_arrivals_success():
     mock_session = Mock()
     mock_session.get = Mock(return_value=mock_response)
 
+    # Mock GTFSCache with stop names
+    mock_cache = Mock(spec=GTFSCache)
+    mock_cache.download_gtfs = AsyncMock(return_value=Path("/fake/path.zip"))
+    mock_cache.get_stop_names = Mock(return_value={
+        "400561": "1 Av/E 79 St",
+        "400999": "South Ferry",
+    })
+
     # Test
-    feed = BusFeed(api_key="test_key", session=mock_session)
+    feed = BusFeed(api_key="test_key", session=mock_session, gtfs_cache=mock_cache)
     arrivals = await feed.get_arrivals(route_id="M15", stop_id="400561")
 
     # Verify the request was made with the API key
@@ -65,25 +79,27 @@ async def test_get_arrivals_success():
     assert len(arrivals) == 1
     assert arrivals[0].route_id == "M15"
     assert arrivals[0].stop_id == "400561"
-    assert arrivals[0].destination == "M15 bus"
+    assert arrivals[0].destination == "South Ferry"
     assert isinstance(arrivals[0].arrival_time, datetime)
 
 
 @pytest.mark.asyncio
-async def test_get_arrivals_no_headsign():
-    """Test getting bus arrivals when trip_headsign is not available."""
+async def test_get_arrivals_destination_fallback():
+    """Test fallback destination when stop names not available."""
+    from pathlib import Path
+    from pymta.gtfs_static import GTFSCache
+
     # Create a GTFS-RT FeedMessage
     feed_message = gtfs_realtime_pb2.FeedMessage()
     feed_message.header.gtfs_realtime_version = "2.0"
     feed_message.header.timestamp = int(datetime.now(timezone.utc).timestamp())
 
-    # Create a trip update entity without headsign
+    # Create a trip update entity
     entity = feed_message.entity.add()
     entity.id = "trip1"
 
     trip_update = entity.trip_update
     trip_update.trip.route_id = "M15"
-    # No trip_headsign field
 
     # Add stop time update
     stop_time = trip_update.stop_time_update.add()
@@ -102,17 +118,25 @@ async def test_get_arrivals_no_headsign():
     mock_session = Mock()
     mock_session.get = Mock(return_value=mock_response)
 
+    # Mock GTFSCache with empty stop names (fallback case)
+    mock_cache = Mock(spec=GTFSCache)
+    mock_cache.download_gtfs = AsyncMock(return_value=Path("/fake/path.zip"))
+    mock_cache.get_stop_names = Mock(return_value={})
+
     # Test
-    feed = BusFeed(api_key="test_key", session=mock_session)
+    feed = BusFeed(api_key="test_key", session=mock_session, gtfs_cache=mock_cache)
     arrivals = await feed.get_arrivals(route_id="M15", stop_id="400561")
 
     assert len(arrivals) == 1
-    assert arrivals[0].destination == "M15 bus"  # Default when no headsign
+    assert arrivals[0].destination == "M15 bus"  # Default when no stop names
 
 
 @pytest.mark.asyncio
 async def test_get_arrivals_filters_past_arrivals():
     """Test that past arrivals are filtered out."""
+    from pathlib import Path
+    from pymta.gtfs_static import GTFSCache
+
     # Create a GTFS-RT FeedMessage
     feed_message = gtfs_realtime_pb2.FeedMessage()
     feed_message.header.gtfs_realtime_version = "2.0"
@@ -140,8 +164,13 @@ async def test_get_arrivals_filters_past_arrivals():
     mock_session = Mock()
     mock_session.get = Mock(return_value=mock_response)
 
+    # Mock GTFSCache
+    mock_cache = Mock(spec=GTFSCache)
+    mock_cache.download_gtfs = AsyncMock(return_value=Path("/fake/path.zip"))
+    mock_cache.get_stop_names = Mock(return_value={})
+
     # Test
-    feed = BusFeed(api_key="test_key", session=mock_session)
+    feed = BusFeed(api_key="test_key", session=mock_session, gtfs_cache=mock_cache)
     arrivals = await feed.get_arrivals(route_id="M15", stop_id="400561")
 
     assert len(arrivals) == 0
@@ -150,6 +179,9 @@ async def test_get_arrivals_filters_past_arrivals():
 @pytest.mark.asyncio
 async def test_get_arrivals_max_arrivals():
     """Test max_arrivals parameter."""
+    from pathlib import Path
+    from pymta.gtfs_static import GTFSCache
+
     # Create a GTFS-RT FeedMessage with 5 arrivals
     feed_message = gtfs_realtime_pb2.FeedMessage()
     feed_message.header.gtfs_realtime_version = "2.0"
@@ -177,8 +209,13 @@ async def test_get_arrivals_max_arrivals():
     mock_session = Mock()
     mock_session.get = Mock(return_value=mock_response)
 
+    # Mock GTFSCache
+    mock_cache = Mock(spec=GTFSCache)
+    mock_cache.download_gtfs = AsyncMock(return_value=Path("/fake/path.zip"))
+    mock_cache.get_stop_names = Mock(return_value={})
+
     # Test
-    feed = BusFeed(api_key="test_key", session=mock_session)
+    feed = BusFeed(api_key="test_key", session=mock_session, gtfs_cache=mock_cache)
     arrivals = await feed.get_arrivals(route_id="M15", stop_id="400561", max_arrivals=3)
 
     assert len(arrivals) == 3
@@ -188,6 +225,8 @@ async def test_get_arrivals_max_arrivals():
 async def test_get_arrivals_network_error():
     """Test handling of network errors."""
     import aiohttp
+    from pathlib import Path
+    from pymta.gtfs_static import GTFSCache
 
     # Mock session that raises an error when entering context
     mock_response = Mock()
@@ -197,7 +236,12 @@ async def test_get_arrivals_network_error():
     mock_session = Mock()
     mock_session.get = Mock(return_value=mock_response)
 
-    feed = BusFeed(api_key="test_key", session=mock_session)
+    # Mock GTFSCache
+    mock_cache = Mock(spec=GTFSCache)
+    mock_cache.download_gtfs = AsyncMock(return_value=Path("/fake/path.zip"))
+    mock_cache.get_stop_names = Mock(return_value={})
+
+    feed = BusFeed(api_key="test_key", session=mock_session, gtfs_cache=mock_cache)
     with pytest.raises(MTAFeedError, match="Error fetching GTFS-RT feed"):
         await feed.get_arrivals(route_id="M15", stop_id="400561")
 
@@ -205,6 +249,9 @@ async def test_get_arrivals_network_error():
 @pytest.mark.asyncio
 async def test_get_arrivals_filters_by_route():
     """Test that arrivals are filtered by route_id."""
+    from pathlib import Path
+    from pymta.gtfs_static import GTFSCache
+
     # Create a GTFS-RT FeedMessage with multiple routes
     feed_message = gtfs_realtime_pb2.FeedMessage()
     feed_message.header.gtfs_realtime_version = "2.0"
@@ -239,8 +286,13 @@ async def test_get_arrivals_filters_by_route():
     mock_session = Mock()
     mock_session.get = Mock(return_value=mock_response)
 
+    # Mock GTFSCache
+    mock_cache = Mock(spec=GTFSCache)
+    mock_cache.download_gtfs = AsyncMock(return_value=Path("/fake/path.zip"))
+    mock_cache.get_stop_names = Mock(return_value={})
+
     # Test - should only get M15
-    feed = BusFeed(api_key="test_key", session=mock_session)
+    feed = BusFeed(api_key="test_key", session=mock_session, gtfs_cache=mock_cache)
     arrivals = await feed.get_arrivals(route_id="M15", stop_id="400561")
 
     assert len(arrivals) == 1

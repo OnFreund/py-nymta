@@ -97,6 +97,20 @@ class SubwayFeed:
             session = aiohttp.ClientSession()
             self._owned_session = session
 
+        # Get stop names from static GTFS for destination lookup
+        try:
+            gtfs_url = STATIC_GTFS_URLS["subway"]
+            zip_path = await self._gtfs_cache.download_gtfs(
+                url=gtfs_url,
+                feed_name="subway",
+                session=session,
+                timeout=self.timeout,
+            )
+            stop_names = self._gtfs_cache.get_stop_names(zip_path)
+        except Exception:
+            # Fall back to empty dict if static GTFS fails
+            stop_names = {}
+
         # Fetch the GTFS-RT feed
         try:
             timeout = aiohttp.ClientTimeout(total=self.timeout)
@@ -134,6 +148,21 @@ class SubwayFeed:
             if trip.route_id != route_id:
                 continue
 
+            # Get destination from the last stop in this trip
+            last_stop_id = None
+            if trip_update.stop_time_update:
+                last_stop_id = trip_update.stop_time_update[-1].stop_id
+
+            # Look up destination name, fall back to route_id if not found
+            if last_stop_id and last_stop_id in stop_names:
+                destination = stop_names[last_stop_id]
+            elif last_stop_id:
+                # Try without direction suffix (N/S)
+                base_last_stop = last_stop_id.rstrip("NS")
+                destination = stop_names.get(base_last_stop, f"{trip.route_id} train")
+            else:
+                destination = f"{trip.route_id} train"
+
             # Process stop time updates
             for stop_time_update in trip_update.stop_time_update:
                 current_stop_id = stop_time_update.stop_id
@@ -153,10 +182,6 @@ class SubwayFeed:
 
                     # Only include future arrivals
                     if arrival_time > now:
-                        # Use route_id as destination for now
-                        # (headsign fields don't exist in standard GTFS-RT)
-                        destination = f"{trip.route_id} train"
-
                         arrivals.append(
                             Arrival(
                                 arrival_time=arrival_time,
@@ -380,6 +405,29 @@ class BusFeed:
             session = aiohttp.ClientSession()
             self._owned_session = session
 
+        # Get stop names from static GTFS for destination lookup
+        # Search all borough feeds to build combined stop names dict
+        stop_names: dict[str, str] = {}
+        borough_feeds = [
+            ("bus_bronx", STATIC_GTFS_URLS["bus_bronx"]),
+            ("bus_brooklyn", STATIC_GTFS_URLS["bus_brooklyn"]),
+            ("bus_manhattan", STATIC_GTFS_URLS["bus_manhattan"]),
+            ("bus_queens", STATIC_GTFS_URLS["bus_queens"]),
+            ("bus_staten_island", STATIC_GTFS_URLS["bus_staten_island"]),
+        ]
+        for feed_name, gtfs_url in borough_feeds:
+            try:
+                zip_path = await self._gtfs_cache.download_gtfs(
+                    url=gtfs_url,
+                    feed_name=feed_name,
+                    session=session,
+                    timeout=self.timeout,
+                )
+                stop_names.update(self._gtfs_cache.get_stop_names(zip_path))
+            except Exception:
+                # Continue if one borough feed fails
+                pass
+
         # Fetch the GTFS-RT trip updates feed
         feed_url = BUS_FEED_URLS["trip_updates"]
         params = {"key": self.api_key}
@@ -418,6 +466,17 @@ class BusFeed:
             if trip.route_id != route_id:
                 continue
 
+            # Get destination from the last stop in this trip
+            last_stop_id = None
+            if trip_update.stop_time_update:
+                last_stop_id = trip_update.stop_time_update[-1].stop_id
+
+            # Look up destination name, fall back to route_id if not found
+            if last_stop_id and last_stop_id in stop_names:
+                destination = stop_names[last_stop_id]
+            else:
+                destination = f"{trip.route_id} bus"
+
             # Process stop time updates
             for stop_time_update in trip_update.stop_time_update:
                 current_stop_id = stop_time_update.stop_id
@@ -435,10 +494,6 @@ class BusFeed:
 
                     # Only include future arrivals
                     if arrival_time > now:
-                        # Use route_id as destination
-                        # (headsign data is typically in static GTFS, not real-time feed)
-                        destination = f"{trip.route_id} bus"
-
                         arrivals.append(
                             Arrival(
                                 arrival_time=arrival_time,

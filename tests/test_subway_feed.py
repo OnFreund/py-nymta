@@ -37,7 +37,10 @@ def test_get_feed_id_for_invalid_route():
 
 @pytest.mark.asyncio
 async def test_get_arrivals_success():
-    """Test getting arrivals successfully."""
+    """Test getting arrivals successfully with destination from last stop."""
+    from pathlib import Path
+    from pymta.gtfs_static import GTFSCache
+
     # Create a GTFS-RT FeedMessage
     feed_message = gtfs_realtime_pb2.FeedMessage()
     feed_message.header.gtfs_realtime_version = "2.0"
@@ -50,11 +53,14 @@ async def test_get_arrivals_success():
     trip_update = entity.trip_update
     trip_update.trip.route_id = "Q"
 
-    # Add stop time update for the future
-    stop_time = trip_update.stop_time_update.add()
-    stop_time.stop_id = "B08S"
-    future_time = datetime.now(timezone.utc).timestamp() + 300  # 5 minutes from now
-    stop_time.arrival.time = int(future_time)
+    # Add stop time updates - the train passes through B08S and ends at D43S
+    stop_time1 = trip_update.stop_time_update.add()
+    stop_time1.stop_id = "B08S"
+    stop_time1.arrival.time = int(datetime.now(timezone.utc).timestamp() + 300)
+
+    stop_time2 = trip_update.stop_time_update.add()
+    stop_time2.stop_id = "D43S"  # Last stop - Coney Island
+    stop_time2.arrival.time = int(datetime.now(timezone.utc).timestamp() + 900)
 
     # Mock response
     mock_response = AsyncMock()
@@ -67,20 +73,73 @@ async def test_get_arrivals_success():
     mock_session = Mock()
     mock_session.get = Mock(return_value=mock_response)
 
+    # Mock GTFSCache with stop names
+    mock_cache = Mock(spec=GTFSCache)
+    mock_cache.download_gtfs = AsyncMock(return_value=Path("/fake/path.zip"))
+    mock_cache.get_stop_names = Mock(return_value={
+        "B08S": "Prospect Park",
+        "D43S": "Coney Island - Stillwell Av",
+    })
+
     # Test
-    feed = SubwayFeed(feed_id="N", session=mock_session)
+    feed = SubwayFeed(feed_id="N", session=mock_session, gtfs_cache=mock_cache)
     arrivals = await feed.get_arrivals(route_id="Q", stop_id="B08S")
 
     assert len(arrivals) == 1
     assert arrivals[0].route_id == "Q"
     assert arrivals[0].stop_id == "B08S"
-    assert arrivals[0].destination == "Q train"
+    assert arrivals[0].destination == "Coney Island - Stillwell Av"
     assert isinstance(arrivals[0].arrival_time, datetime)
+
+
+@pytest.mark.asyncio
+async def test_get_arrivals_destination_fallback():
+    """Test fallback destination when stop names not available."""
+    from pathlib import Path
+    from pymta.gtfs_static import GTFSCache
+
+    # Create a GTFS-RT FeedMessage
+    feed_message = gtfs_realtime_pb2.FeedMessage()
+    feed_message.header.gtfs_realtime_version = "2.0"
+    feed_message.header.timestamp = int(datetime.now(timezone.utc).timestamp())
+
+    entity = feed_message.entity.add()
+    entity.id = "trip1"
+    trip_update = entity.trip_update
+    trip_update.trip.route_id = "Q"
+
+    stop_time = trip_update.stop_time_update.add()
+    stop_time.stop_id = "B08S"
+    stop_time.arrival.time = int(datetime.now(timezone.utc).timestamp() + 300)
+
+    # Mock response
+    mock_response = AsyncMock()
+    mock_response.read = AsyncMock(return_value=feed_message.SerializeToString())
+    mock_response.raise_for_status = Mock()
+    mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+    mock_response.__aexit__ = AsyncMock(return_value=None)
+
+    mock_session = Mock()
+    mock_session.get = Mock(return_value=mock_response)
+
+    # Mock GTFSCache with empty stop names (fallback case)
+    mock_cache = Mock(spec=GTFSCache)
+    mock_cache.download_gtfs = AsyncMock(return_value=Path("/fake/path.zip"))
+    mock_cache.get_stop_names = Mock(return_value={})
+
+    feed = SubwayFeed(feed_id="N", session=mock_session, gtfs_cache=mock_cache)
+    arrivals = await feed.get_arrivals(route_id="Q", stop_id="B08S")
+
+    assert len(arrivals) == 1
+    assert arrivals[0].destination == "Q train"
 
 
 @pytest.mark.asyncio
 async def test_get_arrivals_filters_past_arrivals():
     """Test that past arrivals are filtered out."""
+    from pathlib import Path
+    from pymta.gtfs_static import GTFSCache
+
     # Create a GTFS-RT FeedMessage
     feed_message = gtfs_realtime_pb2.FeedMessage()
     feed_message.header.gtfs_realtime_version = "2.0"
@@ -108,8 +167,13 @@ async def test_get_arrivals_filters_past_arrivals():
     mock_session = Mock()
     mock_session.get = Mock(return_value=mock_response)
 
+    # Mock GTFSCache
+    mock_cache = Mock(spec=GTFSCache)
+    mock_cache.download_gtfs = AsyncMock(return_value=Path("/fake/path.zip"))
+    mock_cache.get_stop_names = Mock(return_value={})
+
     # Test
-    feed = SubwayFeed(feed_id="N", session=mock_session)
+    feed = SubwayFeed(feed_id="N", session=mock_session, gtfs_cache=mock_cache)
     arrivals = await feed.get_arrivals(route_id="Q", stop_id="B08S")
 
     assert len(arrivals) == 0
@@ -118,6 +182,9 @@ async def test_get_arrivals_filters_past_arrivals():
 @pytest.mark.asyncio
 async def test_get_arrivals_max_arrivals():
     """Test max_arrivals parameter."""
+    from pathlib import Path
+    from pymta.gtfs_static import GTFSCache
+
     # Create a GTFS-RT FeedMessage with 5 arrivals
     feed_message = gtfs_realtime_pb2.FeedMessage()
     feed_message.header.gtfs_realtime_version = "2.0"
@@ -145,8 +212,13 @@ async def test_get_arrivals_max_arrivals():
     mock_session = Mock()
     mock_session.get = Mock(return_value=mock_response)
 
+    # Mock GTFSCache
+    mock_cache = Mock(spec=GTFSCache)
+    mock_cache.download_gtfs = AsyncMock(return_value=Path("/fake/path.zip"))
+    mock_cache.get_stop_names = Mock(return_value={})
+
     # Test
-    feed = SubwayFeed(feed_id="N", session=mock_session)
+    feed = SubwayFeed(feed_id="N", session=mock_session, gtfs_cache=mock_cache)
     arrivals = await feed.get_arrivals(route_id="Q", stop_id="B08S", max_arrivals=3)
 
     assert len(arrivals) == 3
@@ -156,6 +228,8 @@ async def test_get_arrivals_max_arrivals():
 async def test_get_arrivals_network_error():
     """Test handling of network errors."""
     import aiohttp
+    from pathlib import Path
+    from pymta.gtfs_static import GTFSCache
 
     # Mock session that raises an error when entering context
     mock_response = Mock()
@@ -165,7 +239,12 @@ async def test_get_arrivals_network_error():
     mock_session = Mock()
     mock_session.get = Mock(return_value=mock_response)
 
-    feed = SubwayFeed(feed_id="N", session=mock_session)
+    # Mock GTFSCache
+    mock_cache = Mock(spec=GTFSCache)
+    mock_cache.download_gtfs = AsyncMock(return_value=Path("/fake/path.zip"))
+    mock_cache.get_stop_names = Mock(return_value={})
+
+    feed = SubwayFeed(feed_id="N", session=mock_session, gtfs_cache=mock_cache)
     with pytest.raises(MTAFeedError, match="Error fetching GTFS-RT feed"):
         await feed.get_arrivals(route_id="Q", stop_id="B08S")
 

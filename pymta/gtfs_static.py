@@ -27,6 +27,7 @@ class GTFSCache:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.ttl_hours = ttl_hours
         self._route_stops_cache = {}
+        self._stop_names_cache = {}
         self._cache_timestamps = {}
 
     def _get_cache_path(self, feed_name: str) -> Path:
@@ -162,3 +163,33 @@ class GTFSCache:
             self._cache_timestamps[cache_key] = datetime.now()
 
             return result
+
+    def get_stop_names(self, zip_path: Path) -> dict[str, str]:
+        """Get a mapping of stop_id to stop_name from GTFS ZIP.
+
+        Args:
+            zip_path: Path to GTFS ZIP file.
+
+        Returns:
+            Dictionary mapping stop_id to stop_name.
+        """
+        cache_key = f"{zip_path.stem}_stop_names"
+
+        # Check memory cache
+        if cache_key in self._stop_names_cache:
+            cache_time = self._cache_timestamps.get(cache_key)
+            if cache_time and (datetime.now() - cache_time) < timedelta(hours=self.ttl_hours):
+                return self._stop_names_cache[cache_key]
+
+        stops_dict = {}
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            with zf.open('stops.txt') as f:
+                reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8-sig'))
+                for row in reader:
+                    stops_dict[row['stop_id']] = row.get('stop_name', '')
+
+        # Cache result
+        self._stop_names_cache[cache_key] = stops_dict
+        self._cache_timestamps[cache_key] = datetime.now()
+
+        return stops_dict
