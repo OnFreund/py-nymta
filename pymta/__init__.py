@@ -23,6 +23,54 @@ class MTAFeedError(MTAError):
     """Exception raised when feed cannot be fetched or parsed."""
 
 
+def _get_terminal_stop_id(stop_time_updates) -> Optional[str]:
+    """Get the terminal (last) stop ID from a list of stop time updates.
+
+    GTFS-RT does not guarantee stop_time_update ordering, so we find the terminal
+    stop by looking for the highest stop_sequence, or falling back to the latest
+    arrival/departure time.
+
+    Args:
+        stop_time_updates: List of StopTimeUpdate protobuf messages.
+
+    Returns:
+        The stop_id of the terminal stop, or None if no stops found.
+    """
+    if not stop_time_updates:
+        return None
+
+    # Try to find terminal by stop_sequence (preferred method)
+    max_sequence = -1
+    terminal_by_sequence = None
+    for stu in stop_time_updates:
+        if stu.stop_sequence > max_sequence:
+            max_sequence = stu.stop_sequence
+            terminal_by_sequence = stu.stop_id
+
+    # If we found a valid sequence (> 0), use it
+    if max_sequence > 0:
+        return terminal_by_sequence
+
+    # Fall back to latest arrival/departure time
+    max_time = -1
+    terminal_by_time = None
+    for stu in stop_time_updates:
+        # Check arrival time
+        if stu.HasField("arrival") and stu.arrival.time > max_time:
+            max_time = stu.arrival.time
+            terminal_by_time = stu.stop_id
+        # Check departure time
+        if stu.HasField("departure") and stu.departure.time > max_time:
+            max_time = stu.departure.time
+            terminal_by_time = stu.stop_id
+
+    if terminal_by_time:
+        return terminal_by_time
+
+    # Last resort: return the last item (original behavior)
+    return stop_time_updates[-1].stop_id if stop_time_updates else None
+
+
 class SubwayFeed:
     """Interface for MTA subway real-time feeds."""
 
@@ -148,10 +196,8 @@ class SubwayFeed:
             if trip.route_id != route_id:
                 continue
 
-            # Get destination from the last stop in this trip
-            last_stop_id = None
-            if trip_update.stop_time_update:
-                last_stop_id = trip_update.stop_time_update[-1].stop_id
+            # Get destination from the terminal stop in this trip
+            last_stop_id = _get_terminal_stop_id(trip_update.stop_time_update)
 
             # Look up destination name, fall back to route_id if not found
             if last_stop_id and last_stop_id in stop_names:
@@ -464,10 +510,8 @@ class BusFeed:
             if trip.route_id != route_id:
                 continue
 
-            # Get destination from the last stop in this trip
-            last_stop_id = None
-            if trip_update.stop_time_update:
-                last_stop_id = trip_update.stop_time_update[-1].stop_id
+            # Get destination from the terminal stop in this trip
+            last_stop_id = _get_terminal_stop_id(trip_update.stop_time_update)
 
             # Look up destination name, fall back to route_id if not found
             if last_stop_id and last_stop_id in stop_names:

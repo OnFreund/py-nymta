@@ -47,6 +47,38 @@ class GTFSCache:
         age = datetime.now() - mtime
         return age < timedelta(hours=self.ttl_hours)
 
+    def _invalidate_feed_caches(self, feed_name: str) -> None:
+        """Invalidate all memory caches related to a feed.
+
+        Called when a new ZIP file is downloaded to ensure stale data isn't served.
+        """
+        # Keys to remove from caches
+        keys_to_remove = []
+
+        # Find all cache keys that start with this feed name
+        for cache_key in list(self._stop_names_cache.keys()):
+            if cache_key.startswith(feed_name) or f"_{feed_name}_" in cache_key or cache_key.endswith(f"_{feed_name}_combined"):
+                keys_to_remove.append(cache_key)
+
+        for cache_key in list(self._route_stops_cache.keys()):
+            if cache_key.startswith(feed_name):
+                keys_to_remove.append(cache_key)
+
+        # Remove from all caches
+        for key in keys_to_remove:
+            self._stop_names_cache.pop(key, None)
+            self._route_stops_cache.pop(key, None)
+            self._cache_timestamps.pop(key, None)
+
+        # Also invalidate any combined cache that includes this feed
+        combined_keys_to_remove = [
+            k for k in self._stop_names_cache.keys()
+            if k.endswith("_combined") and feed_name in k
+        ]
+        for key in combined_keys_to_remove:
+            self._stop_names_cache.pop(key, None)
+            self._cache_timestamps.pop(key, None)
+
     async def download_gtfs(
         self,
         url: str,
@@ -101,6 +133,10 @@ class GTFSCache:
                     if temp_path.exists():
                         temp_path.unlink()
                     raise
+
+                # Invalidate memory caches for this feed since we have new data
+                self._invalidate_feed_caches(feed_name)
+
                 return cache_path
 
             finally:
