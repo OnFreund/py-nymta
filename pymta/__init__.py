@@ -157,8 +157,11 @@ class SubwayFeed:
             if last_stop_id and last_stop_id in stop_names:
                 destination = stop_names[last_stop_id]
             elif last_stop_id:
-                # Try without direction suffix (N/S)
-                base_last_stop = last_stop_id.rstrip("NS")
+                # Try without a single direction suffix (N/S)
+                if last_stop_id.endswith(("N", "S")):
+                    base_last_stop = last_stop_id[:-1]
+                else:
+                    base_last_stop = last_stop_id
                 destination = stop_names.get(base_last_stop, f"{trip.route_id} train")
             else:
                 destination = f"{trip.route_id} train"

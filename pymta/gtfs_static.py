@@ -14,12 +14,12 @@ import aiohttp
 class GTFSCache:
     """Cache for static GTFS data with expiration."""
 
-    def __init__(self, cache_dir: Optional[Path] = None, ttl_hours: int = 24):
+    def __init__(self, cache_dir: Optional[Path] = None, ttl_hours: int = 168):
         """Initialize GTFS cache.
 
         Args:
             cache_dir: Directory to store cached GTFS files. If None, uses temp directory.
-            ttl_hours: Time-to-live for cached data in hours (default: 24).
+            ttl_hours: Time-to-live for cached data in hours (default: 168, i.e., 1 week).
         """
         if cache_dir is None:
             cache_dir = Path.home() / ".cache" / "pymta"
