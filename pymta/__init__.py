@@ -409,8 +409,7 @@ class BusFeed:
             self._owned_session = session
 
         # Get stop names from static GTFS for destination lookup
-        # Search all borough feeds to build combined stop names dict
-        stop_names: dict[str, str] = {}
+        # Uses cached combined dict to avoid rebuilding on every call
         borough_feeds = [
             ("bus_bronx", STATIC_GTFS_URLS["bus_bronx"]),
             ("bus_brooklyn", STATIC_GTFS_URLS["bus_brooklyn"]),
@@ -418,18 +417,14 @@ class BusFeed:
             ("bus_queens", STATIC_GTFS_URLS["bus_queens"]),
             ("bus_staten_island", STATIC_GTFS_URLS["bus_staten_island"]),
         ]
-        for feed_name, gtfs_url in borough_feeds:
-            try:
-                zip_path = await self._gtfs_cache.download_gtfs(
-                    url=gtfs_url,
-                    feed_name=feed_name,
-                    session=session,
-                    timeout=self.timeout,
-                )
-                stop_names.update(self._gtfs_cache.get_stop_names(zip_path))
-            except Exception:
-                # Continue if one borough feed fails
-                pass
+        try:
+            stop_names = await self._gtfs_cache.get_combined_stop_names(
+                feeds=borough_feeds,
+                session=session,
+                timeout=self.timeout,
+            )
+        except Exception:
+            stop_names = {}
 
         # Fetch the GTFS-RT trip updates feed
         feed_url = BUS_FEED_URLS["trip_updates"]

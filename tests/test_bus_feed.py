@@ -62,8 +62,7 @@ async def test_get_arrivals_success():
 
     # Mock GTFSCache with stop names
     mock_cache = Mock(spec=GTFSCache)
-    mock_cache.download_gtfs = AsyncMock(return_value=Path("/fake/path.zip"))
-    mock_cache.get_stop_names = Mock(return_value={
+    mock_cache.get_combined_stop_names = AsyncMock(return_value={
         "400561": "1 Av/E 79 St",
         "400999": "South Ferry",
     })
@@ -121,7 +120,7 @@ async def test_get_arrivals_destination_fallback():
     # Mock GTFSCache with empty stop names (fallback case)
     mock_cache = Mock(spec=GTFSCache)
     mock_cache.download_gtfs = AsyncMock(return_value=Path("/fake/path.zip"))
-    mock_cache.get_stop_names = Mock(return_value={})
+    mock_cache.get_combined_stop_names = AsyncMock(return_value={})
 
     # Test
     feed = BusFeed(api_key="test_key", session=mock_session, gtfs_cache=mock_cache)
@@ -167,7 +166,7 @@ async def test_get_arrivals_filters_past_arrivals():
     # Mock GTFSCache
     mock_cache = Mock(spec=GTFSCache)
     mock_cache.download_gtfs = AsyncMock(return_value=Path("/fake/path.zip"))
-    mock_cache.get_stop_names = Mock(return_value={})
+    mock_cache.get_combined_stop_names = AsyncMock(return_value={})
 
     # Test
     feed = BusFeed(api_key="test_key", session=mock_session, gtfs_cache=mock_cache)
@@ -212,7 +211,7 @@ async def test_get_arrivals_max_arrivals():
     # Mock GTFSCache
     mock_cache = Mock(spec=GTFSCache)
     mock_cache.download_gtfs = AsyncMock(return_value=Path("/fake/path.zip"))
-    mock_cache.get_stop_names = Mock(return_value={})
+    mock_cache.get_combined_stop_names = AsyncMock(return_value={})
 
     # Test
     feed = BusFeed(api_key="test_key", session=mock_session, gtfs_cache=mock_cache)
@@ -239,7 +238,7 @@ async def test_get_arrivals_network_error():
     # Mock GTFSCache
     mock_cache = Mock(spec=GTFSCache)
     mock_cache.download_gtfs = AsyncMock(return_value=Path("/fake/path.zip"))
-    mock_cache.get_stop_names = Mock(return_value={})
+    mock_cache.get_combined_stop_names = AsyncMock(return_value={})
 
     feed = BusFeed(api_key="test_key", session=mock_session, gtfs_cache=mock_cache)
     with pytest.raises(MTAFeedError, match="Error fetching GTFS-RT feed"):
@@ -289,7 +288,7 @@ async def test_get_arrivals_filters_by_route():
     # Mock GTFSCache
     mock_cache = Mock(spec=GTFSCache)
     mock_cache.download_gtfs = AsyncMock(return_value=Path("/fake/path.zip"))
-    mock_cache.get_stop_names = Mock(return_value={})
+    mock_cache.get_combined_stop_names = AsyncMock(return_value={})
 
     # Test - should only get M15
     feed = BusFeed(api_key="test_key", session=mock_session, gtfs_cache=mock_cache)

@@ -88,9 +88,12 @@ class GTFSCache:
                     response.raise_for_status()
                     content = await response.read()
 
-                # Write to cache
-                async with aiofiles.open(cache_path, 'wb') as f:
+                # Write to temp file first, then atomically rename to avoid
+                # partial/corrupted files if interrupted mid-write
+                temp_path = cache_path.with_suffix('.zip.tmp')
+                async with aiofiles.open(temp_path, 'wb') as f:
                     await f.write(content)
+                temp_path.rename(cache_path)
                 return cache_path
 
             finally:
@@ -204,3 +207,51 @@ class GTFSCache:
         self._cache_timestamps[cache_key] = datetime.now()
 
         return stops_dict
+
+    async def get_combined_stop_names(
+        self,
+        feeds: list[tuple[str, str]],
+        session: aiohttp.ClientSession,
+        timeout: int = 60,
+    ) -> dict[str, str]:
+        """Get a combined mapping of stop_id to stop_name from multiple GTFS feeds.
+
+        This method caches the combined result to avoid rebuilding on every call.
+
+        Args:
+            feeds: List of (feed_name, url) tuples.
+            session: aiohttp session for downloads.
+            timeout: Download timeout in seconds.
+
+        Returns:
+            Dictionary mapping stop_id to stop_name from all feeds.
+        """
+        # Create a cache key from all feed names
+        cache_key = "_".join(sorted(name for name, _ in feeds)) + "_combined"
+
+        # Check memory cache
+        if cache_key in self._stop_names_cache:
+            cache_time = self._cache_timestamps.get(cache_key)
+            if cache_time and (datetime.now() - cache_time) < timedelta(hours=self.ttl_hours):
+                return self._stop_names_cache[cache_key]
+
+        # Build combined dict from all feeds
+        combined: dict[str, str] = {}
+        for feed_name, url in feeds:
+            try:
+                zip_path = await self.download_gtfs(
+                    url=url,
+                    feed_name=feed_name,
+                    session=session,
+                    timeout=timeout,
+                )
+                combined.update(self.get_stop_names(zip_path))
+            except Exception:
+                # Continue if one feed fails
+                pass
+
+        # Cache the combined result
+        self._stop_names_cache[cache_key] = combined
+        self._cache_timestamps[cache_key] = datetime.now()
+
+        return combined
