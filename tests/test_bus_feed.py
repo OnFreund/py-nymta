@@ -25,7 +25,6 @@ def test_init_without_api_key():
 @pytest.mark.asyncio
 async def test_get_arrivals_success():
     """Test getting bus arrivals successfully with destination from last stop."""
-    from pathlib import Path
     from pymta.gtfs_static import GTFSCache
 
     # Create a GTFS-RT FeedMessage

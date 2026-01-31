@@ -88,12 +88,19 @@ class GTFSCache:
                     response.raise_for_status()
                     content = await response.read()
 
-                # Write to temp file first, then atomically rename to avoid
+                # Write to temp file first, then atomically replace to avoid
                 # partial/corrupted files if interrupted mid-write
                 temp_path = cache_path.with_suffix('.zip.tmp')
-                async with aiofiles.open(temp_path, 'wb') as f:
-                    await f.write(content)
-                temp_path.rename(cache_path)
+                try:
+                    async with aiofiles.open(temp_path, 'wb') as f:
+                        await f.write(content)
+                    # replace() is atomic and works when target exists (unlike rename on Windows)
+                    temp_path.replace(cache_path)
+                except BaseException:
+                    # Clean up temp file on any failure
+                    if temp_path.exists():
+                        temp_path.unlink()
+                    raise
                 return cache_path
 
             finally:
@@ -246,8 +253,8 @@ class GTFSCache:
                     timeout=timeout,
                 )
                 combined.update(self.get_stop_names(zip_path))
-            except Exception:
-                # Continue if one feed fails
+            except (aiohttp.ClientError, zipfile.BadZipFile, KeyError, OSError):
+                # Continue if one feed fails (download error, corrupt zip, missing file, etc.)
                 pass
 
         # Cache the combined result
