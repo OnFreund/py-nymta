@@ -1,5 +1,6 @@
 """Static GTFS feed parsing and caching."""
 
+import asyncio
 import csv
 import io
 import zipfile
@@ -18,7 +19,7 @@ class GTFSCache:
         """Initialize GTFS cache.
 
         Args:
-            cache_dir: Directory to store cached GTFS files. If None, uses temp directory.
+            cache_dir: Directory to store cached GTFS files. Defaults to ~/.cache/pymta.
             ttl_hours: Time-to-live for cached data in hours (default: 168, i.e., 1 week).
         """
         if cache_dir is None:
@@ -29,6 +30,7 @@ class GTFSCache:
         self._route_stops_cache = {}
         self._stop_names_cache = {}
         self._cache_timestamps = {}
+        self._download_locks: dict[str, asyncio.Lock] = {}
 
     def _get_cache_path(self, feed_name: str) -> Path:
         """Get cache file path for a feed."""
@@ -63,31 +65,37 @@ class GTFSCache:
         Returns:
             Path to downloaded/cached ZIP file.
         """
-        cache_path = self._get_cache_path(feed_name)
+        # Get or create a lock for this feed to prevent concurrent downloads
+        if feed_name not in self._download_locks:
+            self._download_locks[feed_name] = asyncio.Lock()
 
-        # Return cached file if valid
-        if self._is_cache_valid(feed_name):
-            return cache_path
+        async with self._download_locks[feed_name]:
+            cache_path = self._get_cache_path(feed_name)
 
-        # Download new file
-        owned_session = False
-        if session is None:
-            session = aiohttp.ClientSession()
-            owned_session = True
+            # Return cached file if valid (check inside lock in case another
+            # coroutine just finished downloading)
+            if self._is_cache_valid(feed_name):
+                return cache_path
 
-        try:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout)) as response:
-                response.raise_for_status()
-                content = await response.read()
+            # Download new file
+            owned_session = False
+            if session is None:
+                session = aiohttp.ClientSession()
+                owned_session = True
 
-            # Write to cache
-            async with aiofiles.open(cache_path, 'wb') as f:
-                await f.write(content)
-            return cache_path
+            try:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout)) as response:
+                    response.raise_for_status()
+                    content = await response.read()
 
-        finally:
-            if owned_session:
-                await session.close()
+                # Write to cache
+                async with aiofiles.open(cache_path, 'wb') as f:
+                    await f.write(content)
+                return cache_path
+
+            finally:
+                if owned_session:
+                    await session.close()
 
     def parse_stops_for_route(self, zip_path: Path, route_id: str) -> list[dict]:
         """Parse stops for a specific route from GTFS ZIP.
@@ -186,7 +194,10 @@ class GTFSCache:
             with zf.open('stops.txt') as f:
                 reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8-sig'))
                 for row in reader:
-                    stops_dict[row['stop_id']] = row.get('stop_name', '')
+                    stop_name = (row.get('stop_name') or '').strip()
+                    if stop_name:
+                        # Only include stops with a usable name
+                        stops_dict[row['stop_id']] = stop_name
 
         # Cache result
         self._stop_names_cache[cache_key] = stops_dict
