@@ -289,8 +289,15 @@ class GTFSCache:
                     timeout=timeout,
                 )
                 combined.update(self.get_stop_names(zip_path))
-            except (aiohttp.ClientError, zipfile.BadZipFile, KeyError, OSError):
-                # Continue if one feed fails (download error, corrupt zip, missing file, etc.)
+            except (
+                aiohttp.ClientError,
+                zipfile.BadZipFile,
+                KeyError,
+                OSError,
+                asyncio.TimeoutError,
+                TimeoutError,
+            ):
+                # Continue if one feed fails (download error, timeout, corrupt zip, missing file, etc.)
                 pass
 
         # Cache the combined result
