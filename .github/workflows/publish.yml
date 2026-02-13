@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths: [pyproject.toml]
+  workflow_dispatch:
 
 jobs:
   publish:
@@ -18,8 +19,13 @@ jobs:
       - name: Check if version changed
         id: version-check
         run: |
-          OLD_VERSION=$(git show HEAD~1:pyproject.toml | grep '^version' | cut -d'"' -f2)
-          NEW_VERSION=$(grep '^version' pyproject.toml | cut -d'"' -f2)
+          if git rev-parse HEAD~1 >/dev/null 2>&1; then
+            OLD_VERSION=$(git show HEAD~1:pyproject.toml | grep '^version *= ' | cut -d'"' -f2)
+          else
+            echo "No previous commit; defaulting to publish."
+            OLD_VERSION=""
+          fi
+          NEW_VERSION=$(grep '^version *= ' pyproject.toml | cut -d'"' -f2)
           if [ "$OLD_VERSION" != "$NEW_VERSION" ]; then
             echo "changed=true" >> $GITHUB_OUTPUT
             echo "Version changed: $OLD_VERSION -> $NEW_VERSION"

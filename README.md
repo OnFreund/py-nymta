@@ -9,7 +9,7 @@ Python library for accessing MTA (Metropolitan Transportation Authority) real-ti
 - Real-time bus arrivals and vehicle positions
 - Compatible with Home Assistant (aiohttp-based)
 - Optional session management - use your own aiohttp session or let the library manage it
-- Uses gtfs-realtime-bindings 2.0.0+ (compatible with latest protobuf)
+- Uses gtfs-realtime-bindings 2.0.0 (compatible with latest protobuf)
 - Type hints for better IDE support
 
 ## Installation
