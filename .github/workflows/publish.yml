@@ -1,0 +1,50 @@
+name: Publish to PyPI
+
+on:
+  push:
+    branches: [main]
+    paths: [pyproject.toml]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # Required for trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # Need previous commit to compare
+
+      - name: Check if version changed
+        id: version-check
+        run: |
+          if git rev-parse HEAD~1 >/dev/null 2>&1; then
+            OLD_VERSION=$(git show HEAD~1:pyproject.toml | grep '^version *= ' | cut -d'"' -f2)
+          else
+            echo "No previous commit; defaulting to publish."
+            OLD_VERSION=""
+          fi
+          NEW_VERSION=$(grep '^version *= ' pyproject.toml | cut -d'"' -f2)
+          if [ "$OLD_VERSION" != "$NEW_VERSION" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Version changed: $OLD_VERSION -> $NEW_VERSION"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "Version unchanged: $NEW_VERSION"
+          fi
+
+      - uses: actions/setup-python@v5
+        if: steps.version-check.outputs.changed == 'true'
+        with:
+          python-version: '3.12'
+
+      - name: Build package
+        if: steps.version-check.outputs.changed == 'true'
+        run: |
+          pip install build
+          python -m build
+
+      - name: Publish to PyPI
+        if: steps.version-check.outputs.changed == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
