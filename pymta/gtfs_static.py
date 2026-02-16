@@ -217,8 +217,12 @@ class GTFSCache:
                         # Track terminal stop (highest sequence) per direction
                         if direction_id not in direction_terminal:
                             direction_terminal[direction_id] = (stop_id, stop_sequence)
-                        elif stop_sequence > direction_terminal[direction_id][1]:
-                            direction_terminal[direction_id] = (stop_id, stop_sequence)
+                        else:
+                            existing_stop_id, existing_seq = direction_terminal[direction_id]
+                            # Use (stop_sequence, stop_id) as composite key so that
+                            # ties on stop_sequence are broken deterministically.
+                            if (stop_sequence, stop_id) > (existing_seq, existing_stop_id):
+                                direction_terminal[direction_id] = (stop_id, stop_sequence)
 
                         # Keep track of unique stops per direction
                         stop_direction_key = (stop_id, direction_id)
