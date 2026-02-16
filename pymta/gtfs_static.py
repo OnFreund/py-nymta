@@ -184,7 +184,7 @@ class GTFSCache:
                 return []
 
             # Parse trips.txt to get trip_ids and direction_id for this route
-            # Maps trip_id -> direction_id (0 or 1)
+            # Maps trip_id -> direction_id (integer, defaulting invalid/missing to 0)
             trip_directions = {}
             with zf.open('trips.txt') as f:
                 reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8-sig'))
@@ -221,9 +221,9 @@ class GTFSCache:
                             direction_terminal[direction_id] = (stop_id, stop_sequence)
 
                         # Keep track of unique stops per direction
-                        cache_key_stop = (stop_id, direction_id)
-                        if cache_key_stop not in route_stops:
-                            route_stops[cache_key_stop] = {
+                        stop_direction_key = (stop_id, direction_id)
+                        if stop_direction_key not in route_stops:
+                            route_stops[stop_direction_key] = {
                                 'stop_id': stop_id,
                                 'stop_name': stops_dict.get(stop_id, ''),
                                 'stop_sequence': stop_sequence,
@@ -233,9 +233,9 @@ class GTFSCache:
                             # If the same stop appears in multiple trips for the same
                             # direction, use the minimum stop_sequence across trips to
                             # get a consistent ordering independent of file order.
-                            existing_seq = route_stops[cache_key_stop]['stop_sequence']
+                            existing_seq = route_stops[stop_direction_key]['stop_sequence']
                             if stop_sequence < existing_seq:
-                                route_stops[cache_key_stop]['stop_sequence'] = stop_sequence
+                                route_stops[stop_direction_key]['stop_sequence'] = stop_sequence
 
             # Derive direction names from terminal stops
             direction_names = {
