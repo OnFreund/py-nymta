@@ -225,6 +225,13 @@ class GTFSCache:
                                 'stop_sequence': stop_sequence,
                                 'direction_id': direction_id,
                             }
+                        else:
+                            # If the same stop appears in multiple trips for the same
+                            # direction, use the minimum stop_sequence across trips to
+                            # get a consistent ordering independent of file order.
+                            existing_seq = route_stops[cache_key_stop]['stop_sequence']
+                            if stop_sequence < existing_seq:
+                                route_stops[cache_key_stop]['stop_sequence'] = stop_sequence
 
             # Derive direction names from terminal stops
             direction_names = {
