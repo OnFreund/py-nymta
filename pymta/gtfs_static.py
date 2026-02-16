@@ -190,7 +190,11 @@ class GTFSCache:
                 reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8-sig'))
                 for row in reader:
                     if row['route_id'] == route_id:
-                        direction_id = int(row.get('direction_id', 0))
+                        raw_direction = (row.get('direction_id') or '').strip()
+                        try:
+                            direction_id = int(raw_direction) if raw_direction else 0
+                        except ValueError:
+                            direction_id = 0
                         trip_directions[row['trip_id']] = direction_id
 
             if not trip_directions:
@@ -243,10 +247,10 @@ class GTFSCache:
             for stop in route_stops.values():
                 stop['direction_name'] = direction_names.get(stop['direction_id'], '')
 
-            # Convert to sorted list by direction_id first, then sequence
+            # Convert to sorted list by direction_id, then sequence, with stop_id tie-breaker
             result = sorted(
                 route_stops.values(),
-                key=lambda x: (x['direction_id'], x['stop_sequence'])
+                key=lambda x: (x['direction_id'], x['stop_sequence'], x['stop_id'])
             )
 
             # Cache result
