@@ -151,7 +151,9 @@ class GTFSCache:
             route_id: Route ID to get stops for.
 
         Returns:
-            List of stop dictionaries with stop_id, stop_name, stop_sequence.
+            List of stop dictionaries with stop_id, stop_name, stop_sequence,
+            direction_id, and direction_name. The same physical stop may appear
+            multiple times if it serves multiple directions.
         """
         cache_key = f"{zip_path.stem}_{route_id}"
 
@@ -181,36 +183,64 @@ class GTFSCache:
             if not route_found:
                 return []
 
-            # Parse trips.txt to get trip_ids for this route
-            trip_ids = []
+            # Parse trips.txt to get trip_ids and direction_id for this route
+            # Maps trip_id -> direction_id (0 or 1)
+            trip_directions = {}
             with zf.open('trips.txt') as f:
                 reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8-sig'))
                 for row in reader:
                     if row['route_id'] == route_id:
-                        trip_ids.append(row['trip_id'])
+                        direction_id = int(row.get('direction_id', 0))
+                        trip_directions[row['trip_id']] = direction_id
 
-            if not trip_ids:
+            if not trip_directions:
                 return []
 
             # Parse stop_times.txt to get stops for these trips
+            # Key by (stop_id, direction_id) so same stop appears per direction
             route_stops = {}
+            # Track max sequence per direction to find terminal stops
+            direction_terminal: dict[int, tuple[str, int]] = {}
             with zf.open('stop_times.txt') as f:
                 reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8-sig'))
                 for row in reader:
-                    if row['trip_id'] in trip_ids:
+                    trip_id = row['trip_id']
+                    if trip_id in trip_directions:
                         stop_id = row['stop_id']
                         stop_sequence = int(row.get('stop_sequence', 0))
+                        direction_id = trip_directions[trip_id]
 
-                        # Keep track of unique stops and their typical sequence
-                        if stop_id not in route_stops:
-                            route_stops[stop_id] = {
+                        # Track terminal stop (highest sequence) per direction
+                        if direction_id not in direction_terminal:
+                            direction_terminal[direction_id] = (stop_id, stop_sequence)
+                        elif stop_sequence > direction_terminal[direction_id][1]:
+                            direction_terminal[direction_id] = (stop_id, stop_sequence)
+
+                        # Keep track of unique stops per direction
+                        cache_key_stop = (stop_id, direction_id)
+                        if cache_key_stop not in route_stops:
+                            route_stops[cache_key_stop] = {
                                 'stop_id': stop_id,
                                 'stop_name': stops_dict.get(stop_id, ''),
                                 'stop_sequence': stop_sequence,
+                                'direction_id': direction_id,
                             }
 
-            # Convert to sorted list by sequence
-            result = sorted(route_stops.values(), key=lambda x: x['stop_sequence'])
+            # Derive direction names from terminal stops
+            direction_names = {
+                dir_id: stops_dict.get(stop_id, '')
+                for dir_id, (stop_id, _) in direction_terminal.items()
+            }
+
+            # Add direction_name to each stop
+            for stop in route_stops.values():
+                stop['direction_name'] = direction_names.get(stop['direction_id'], '')
+
+            # Convert to sorted list by direction_id first, then sequence
+            result = sorted(
+                route_stops.values(),
+                key=lambda x: (x['direction_id'], x['stop_sequence'])
+            )
 
             # Cache result
             self._route_stops_cache[cache_key] = result
