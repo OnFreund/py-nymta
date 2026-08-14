@@ -10,7 +10,6 @@ FEED_URLS = {
     "SI": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-si",
     "G": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-g",
     "J": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-jz",
-    "7": "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds/nyct%2Fgtfs-7",
 }
 
 # MTA Static GTFS feed URLs
@@ -33,13 +32,14 @@ BUS_FEED_URLS = {
 
 # Mapping of subway lines to feed IDs
 LINE_TO_FEED = {
-    # Feed 1: 1, 2, 3, 4, 5, 6, GS (Grand Central Shuttle)
+    # Feed 1: 1, 2, 3, 4, 5, 6, 7, GS (Grand Central Shuttle)
     "1": "1",
     "2": "1",
     "3": "1",
     "4": "1",
     "5": "1",
     "6": "1",
+    "7": "1",
     "GS": "1",
     # Feed A: A, C, E, H (Rockaway Shuttle), FS (Franklin Av Shuttle)
     "A": "A",
@@ -66,6 +66,4 @@ LINE_TO_FEED = {
     # Feed J: J, Z
     "J": "J",
     "Z": "J",
-    # Feed 7: 7, 7X (7 Express)
-    "7": "7",
 }
