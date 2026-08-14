@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "py-nymta"
-version = "0.4.0"
+version = "0.4.1"
 description = "Python library for accessing MTA (Metropolitan Transportation Authority) real-time transit data for NYC"
 readme = "README.md"
 authors = [
