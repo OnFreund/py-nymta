@@ -7,7 +7,13 @@ import aiohttp
 from google.protobuf.message import DecodeError
 from google.transit import gtfs_realtime_pb2
 
-from .constants import FEED_URLS, LINE_TO_FEED, BUS_FEED_URLS, STATIC_GTFS_URLS
+from .constants import (
+    BUS_FEED_URLS,
+    BUS_STATIC_GTFS_FEEDS,
+    FEED_URLS,
+    LINE_TO_FEED,
+    STATIC_GTFS_URLS,
+)
 from .models import Arrival
 from .gtfs_static import GTFSCache
 
@@ -456,16 +462,9 @@ class BusFeed:
 
         # Get stop names from static GTFS for destination lookup
         # Uses cached combined dict to avoid rebuilding on every call
-        borough_feeds = [
-            ("bus_bronx", STATIC_GTFS_URLS["bus_bronx"]),
-            ("bus_brooklyn", STATIC_GTFS_URLS["bus_brooklyn"]),
-            ("bus_manhattan", STATIC_GTFS_URLS["bus_manhattan"]),
-            ("bus_queens", STATIC_GTFS_URLS["bus_queens"]),
-            ("bus_staten_island", STATIC_GTFS_URLS["bus_staten_island"]),
-        ]
         try:
             stop_names = await self._gtfs_cache.get_combined_stop_names(
-                feeds=borough_feeds,
+                feeds=BUS_STATIC_GTFS_FEEDS,
                 session=session,
                 timeout=self.timeout,
             )
@@ -574,16 +573,8 @@ class BusFeed:
             self._owned_session = session
 
         try:
-            # Search all borough feeds for the route
-            borough_feeds = [
-                ("bus_bronx", STATIC_GTFS_URLS["bus_bronx"]),
-                ("bus_brooklyn", STATIC_GTFS_URLS["bus_brooklyn"]),
-                ("bus_manhattan", STATIC_GTFS_URLS["bus_manhattan"]),
-                ("bus_queens", STATIC_GTFS_URLS["bus_queens"]),
-                ("bus_staten_island", STATIC_GTFS_URLS["bus_staten_island"]),
-            ]
-
-            for feed_name, gtfs_url in borough_feeds:
+            # Search all bus feeds (NYCT boroughs and MTA Bus Company) for the route
+            for feed_name, gtfs_url in BUS_STATIC_GTFS_FEEDS:
                 # Download/cache the static GTFS feed
                 zip_path = await self._gtfs_cache.download_gtfs(
                     url=gtfs_url,
@@ -597,8 +588,8 @@ class BusFeed:
                 if stops:
                     return stops
 
-            # Route not found in any borough feed
-            raise MTAFeedError(f"Route {route_id} not found in any borough GTFS feed")
+            # Route not found in any bus feed
+            raise MTAFeedError(f"Route {route_id} not found in any bus GTFS feed")
 
         except MTAFeedError:
             raise

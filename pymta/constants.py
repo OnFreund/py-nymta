@@ -20,7 +20,22 @@ STATIC_GTFS_URLS = {
     "bus_manhattan": "http://web.mta.info/developers/data/nyct/bus/google_transit_manhattan.zip",
     "bus_queens": "http://web.mta.info/developers/data/nyct/bus/google_transit_queens.zip",
     "bus_staten_island": "http://web.mta.info/developers/data/nyct/bus/google_transit_staten_island.zip",
+    # MTA Bus Company routes (e.g. Q18, Q52+, BxM1, QM2) are not in the NYCT borough feeds
+    "bus_company": "http://web.mta.info/developers/data/busco/google_transit.zip",
 }
+
+# Static GTFS feeds searched for bus routes and stop names, as (feed_name, url) tuples
+BUS_STATIC_GTFS_FEEDS = [
+    (name, STATIC_GTFS_URLS[name])
+    for name in (
+        "bus_bronx",
+        "bus_brooklyn",
+        "bus_manhattan",
+        "bus_queens",
+        "bus_staten_island",
+        "bus_company",
+    )
+]
 
 # MTA GTFS-RT feed URLs for buses
 # Note: These require an API key as a query parameter

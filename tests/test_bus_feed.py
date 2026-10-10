@@ -496,3 +496,53 @@ async def test_get_stops():
     # and stopped when it found results in manhattan
     assert mock_cache.download_gtfs.call_count == 3
     assert mock_cache.parse_stops_for_route.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_get_stops_mta_bus_company_route():
+    """Test getting static stops for a route only in the MTA Bus Company feed."""
+    from pathlib import Path
+    from pymta.constants import STATIC_GTFS_URLS
+    from pymta.gtfs_static import GTFSCache
+
+    mock_cache = Mock(spec=GTFSCache)
+    mock_cache.download_gtfs = AsyncMock(return_value=Path("/fake/path.zip"))
+
+    # Q18 is operated by MTA Bus Company, so none of the NYCT borough feeds have it
+    mock_cache.parse_stops_for_route = Mock(side_effect=[
+        [],  # bronx
+        [],  # brooklyn
+        [],  # manhattan
+        [],  # queens
+        [],  # staten island
+        [    # MTA Bus Company - found!
+            {"stop_id": "550599", "stop_name": "69 ST/GRAND AV", "stop_sequence": 1},
+        ],
+    ])
+
+    feed = BusFeed(api_key="test_key", session=Mock(), gtfs_cache=mock_cache)
+    stops = await feed.get_stops(route_id="Q18")
+
+    assert len(stops) == 1
+    assert stops[0]["stop_name"] == "69 ST/GRAND AV"
+    last_call = mock_cache.download_gtfs.call_args_list[-1]
+    assert last_call.kwargs["feed_name"] == "bus_company"
+    assert last_call.kwargs["url"] == STATIC_GTFS_URLS["bus_company"]
+
+
+@pytest.mark.asyncio
+async def test_get_stops_route_not_found():
+    """Test that a route missing from every bus feed raises MTAFeedError."""
+    from pathlib import Path
+    from pymta.gtfs_static import GTFSCache
+
+    mock_cache = Mock(spec=GTFSCache)
+    mock_cache.download_gtfs = AsyncMock(return_value=Path("/fake/path.zip"))
+    mock_cache.parse_stops_for_route = Mock(return_value=[])
+
+    feed = BusFeed(api_key="test_key", session=Mock(), gtfs_cache=mock_cache)
+    with pytest.raises(MTAFeedError, match="not found"):
+        await feed.get_stops(route_id="X999")
+
+    # All six feeds (five NYCT boroughs + MTA Bus Company) should be searched
+    assert mock_cache.download_gtfs.call_count == 6
