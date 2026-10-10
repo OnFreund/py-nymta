@@ -486,7 +486,7 @@ Dataclass representing a single train arrival.
 ```bash
 git clone https://github.com/OnFreund/py-nymta.git
 cd py-nymta
-pip install -e .
+pip install -e ".[test]"
 ```
 
 ### Running Tests
