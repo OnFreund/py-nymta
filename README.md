@@ -432,7 +432,7 @@ Get all stops for a bus route from static GTFS data.
 **Raises:**
 - `MTAFeedError`: If GTFS data cannot be fetched or parsed, or route not found
 
-**Note:** This method searches all borough GTFS feeds to find the route. Static GTFS data is cached locally for 24 hours to improve performance.
+**Note:** This method searches the NYCT borough GTFS feeds and the MTA Bus Company feed to find the route. Static GTFS data is cached locally for 24 hours to improve performance.
 
 #### `async get_active_stops(route_id: str) -> list[dict]`
 
