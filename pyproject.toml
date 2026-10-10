@@ -27,6 +27,12 @@ dependencies = [
     "aiofiles>=23.0.0",
 ]
 
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
 [project.urls]
 Homepage = "https://github.com/OnFreund/py-nymta"
 Issues = "https://github.com/OnFreund/py-nymta/issues"
