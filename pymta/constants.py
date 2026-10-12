@@ -56,22 +56,22 @@ LINE_TO_FEED = {
     "6": "1",
     "7": "1",
     "GS": "1",
-    # Feed A: A, C, E, H (Rockaway Shuttle), FS (Franklin Av Shuttle)
+    # Feed A: A, C, E, H (Rockaway Shuttle)
     "A": "A",
     "C": "A",
     "E": "A",
     "H": "A",
-    "FS": "A",
     # Feed N: N, Q, R, W
     "N": "N",
     "Q": "N",
     "R": "N",
     "W": "N",
-    # Feed B: B, D, F, M
+    # Feed B: B, D, F, M, FS (Franklin Av Shuttle)
     "B": "B",
     "D": "B",
     "F": "B",
     "M": "B",
+    "FS": "B",
     # Feed L: L
     "L": "L",
     # Feed SI: SIR (Staten Island Railway)

@@ -27,6 +27,8 @@ def test_get_feed_id_for_route():
     assert SubwayFeed.get_feed_id_for_route("Q") == "N"
     assert SubwayFeed.get_feed_id_for_route("1") == "1"
     assert SubwayFeed.get_feed_id_for_route("F") == "B"
+    # The Franklin Av Shuttle is published in the BDFM feed, not ACE.
+    assert SubwayFeed.get_feed_id_for_route("FS") == "B"
 
 
 def test_get_feed_id_for_invalid_route():
