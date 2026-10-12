@@ -17,7 +17,7 @@ from .constants import (
 from .models import Arrival
 from .gtfs_static import GTFSCache
 
-__version__ = "0.4.0"
+__version__ = "0.4.3"
 __all__ = ["SubwayFeed", "BusFeed", "Arrival", "MTAError", "MTAFeedError"]
 
 
