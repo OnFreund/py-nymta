@@ -117,6 +117,36 @@ asyncio.run(main())
 
 **Note**: This returns stops from the real-time feed (currently active). For a complete list of all stops on a route, use the `get_stops()` method below.
 
+### Discovering Feeds for a Stop, Getting all Arrivals for those Feeds at that Stop
+
+`SubwayFeed` supports discovery of which feeds normally serve a given stop by calling
+`SubwayFeed.get_feed_ids_for_stop()`. Passing stop_id and the returned array of feeds to
+`SubwayFeed.get_stop_arrivals()` will return a sorted list of upcoming arrivals at
+that stop across all those feeds.
+
+```python
+import asyncio
+
+import aiohttp
+from pymta import SubwayFeed
+
+
+async def main():
+    async with aiohttp.ClientSession() as session:
+        # Feeds carrying the routes scheduled at 81 St, southbound
+        feed_ids = await SubwayFeed.get_feed_ids_for_stop("A21S", session=session)
+        print(feed_ids)  # ['A', 'B']
+
+        arrivals = await SubwayFeed.get_stop_arrivals(
+            "A21S", feed_ids, session=session, max_arrivals=5
+        )
+        for arrival in arrivals:
+            print(f"{arrival.route_id} to {arrival.destination} at {arrival.arrival_time}")
+
+
+asyncio.run(main())
+```
+
 ### Getting All Stops for a Route (Static GTFS)
 
 Both `SubwayFeed` and `BusFeed` support getting the complete list of stops for a route from static GTFS data. This is useful for showing dropdown menus or complete route information:
@@ -294,7 +324,7 @@ Initialize the subway feed.
 Get upcoming train arrivals for a specific route and stop.
 
 **Parameters:**
-- `route_id`: The route/line ID (e.g., '1', 'A', 'Q')
+- `route_id`: The route/line ID (e.g., '1', 'A', 'Q' or None to skip filtering arrivals by line)
 - `stop_id`: The stop ID including direction (e.g., '127N', 'B08S')
 - `max_arrivals`: Maximum number of arrivals to return (default: 3)
 
@@ -337,6 +367,52 @@ Get all active stops for a subway route from the real-time feed.
 
 **Raises:**
 - `MTAFeedError`: If feed cannot be fetched or parsed
+
+#### `SubwayFeed.get_stop_arrivals`
+
+Get upcoming arrivals for every route at a stop, across several feeds. The feeds are
+read concurrently, and their arrivals are merged.
+
+**Parameters:**
+- `stop_id` (str): The stop ID including direction (e.g., `'A21S'`).
+- `feed_ids` (list[str]): The feeds to read (e.g., `['A', 'B']`), usually from
+  `get_feed_ids_for_stop`. An empty list returns an empty result without fetching anything.
+- `session` (aiohttp.ClientSession): Session shared by all feed requests. Required.
+- `gtfs_cache` (GTFSCache, optional): Cache for static stop names, shared by all feeds.
+  Pass the same cache on every call to avoid re-reading the timetable.
+- `max_arrivals` (int): Maximum number of arrivals to return, across all feeds (default: 3).
+- `timeout` (int): Request timeout in seconds (default: 30).
+
+**Returns:** List of `Arrival` objects from all feeds, sorted by arrival time, limited to
+`max_arrivals`.
+
+**Raises:** `MTAFeedError` if any feed cannot be fetched or parsed. A partial result is
+never returned, because that would silently leave out the failed feed's routes.
+
+#### `SubwayFeed.get_feed_ids_for_stop` (new)
+
+Get the feed IDs to read for every route scheduled at a stop, using the static GTFS
+timetable (downloaded and cached if needed).
+
+**Parameters:**
+- `stop_id` (str): The stop ID including direction (e.g., `'A21S'`).
+- `session` (aiohttp.ClientSession): Session used to download the static timetable.
+- `gtfs_cache` (GTFSCache, optional): Cache for the static timetable.
+- `timeout` (int): Download timeout in seconds (default: 30).
+
+**Returns:** Sorted list of feed IDs (e.g., `['A', 'B']`). Empty if no scheduled trips
+call at the stop.
+
+**Raises:** `MTAFeedError` if the static GTFS data cannot be fetched or parsed.
+
+### `SubwayFeed.get_feed_ids_for_routes` (new)
+
+Get the sorted, de-duplicated feed IDs that carry the given routes. Routes that aren't
+recognised are skipped.
+
+```python
+SubwayFeed.get_feed_ids_for_routes({"B", "C", "D"})  # ['A', 'B']
+```
 
 #### `async close()`
 
@@ -382,12 +458,12 @@ Initialize the bus feed.
 **Raises:**
 - `ValueError`: If api_key is not provided
 
-#### `async get_arrivals(route_id: str, stop_id: str, max_arrivals: int = 3) -> list[Arrival]`
+#### `async get_arrivals(route_id: str | None, stop_id: str, max_arrivals: int = 3) -> list[Arrival]`
 
 Get upcoming bus arrivals for a specific route and stop.
 
 **Parameters:**
-- `route_id`: The bus route ID (e.g., 'M15', 'B46', 'Q10')
+- `route_id`: The bus route ID (e.g., 'M15', 'B46', 'Q10' or None to skip filtering arrivals by route)
 - `stop_id`: The stop ID (e.g., '400561', '308209')
 - `max_arrivals`: Maximum number of arrivals to return (default: 3)
 
