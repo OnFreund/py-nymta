@@ -128,7 +128,7 @@ class SubwayFeed:
 
     async def get_arrivals(
         self,
-        route_id: str,
+        route_id: str | None,
         stop_id: str,
         max_arrivals: int = 3,
     ) -> list[Arrival]:
@@ -199,7 +199,7 @@ class SubwayFeed:
             trip = trip_update.trip
 
             # Filter by route/line
-            if trip.route_id != route_id:
+            if route_id is not None and trip.route_id != route_id:
                 continue
 
             # Get destination from the terminal stop in this trip
@@ -437,7 +437,7 @@ class BusFeed:
 
     async def get_arrivals(
         self,
-        route_id: str,
+        route_id: str | None,
         stop_id: str,
         max_arrivals: int = 3,
     ) -> list[Arrival]:
@@ -506,7 +506,7 @@ class BusFeed:
             trip = trip_update.trip
 
             # Filter by route
-            if trip.route_id != route_id:
+            if route_id is not None and trip.route_id != route_id:
                 continue
 
             # Get destination from the terminal stop in this trip
