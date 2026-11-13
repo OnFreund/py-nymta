@@ -182,6 +182,25 @@ async def test_get_arrivals_filters_past_arrivals():
 
 
 @pytest.mark.asyncio
+async def test_get_arrivals_filters_by_route(make_feed, mock_session, subway_cache):
+    """Test that arrivals are filtered by route_id when one is given."""
+    content = make_feed(
+        [
+            ("Q", [("B08S", 300)]),
+            ("R", [("B08S", 600)]),
+        ]
+    )
+    feed = SubwayFeed(
+        feed_id="N", session=mock_session(content), gtfs_cache=subway_cache()
+    )
+
+    arrivals = await feed.get_arrivals(route_id="Q", stop_id="B08S")
+
+    assert len(arrivals) == 1
+    assert arrivals[0].route_id == "Q"
+
+
+@pytest.mark.asyncio
 async def test_get_arrivals_max_arrivals():
     """Test max_arrivals parameter."""
     from pathlib import Path
