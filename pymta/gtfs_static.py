@@ -263,6 +263,56 @@ class GTFSCache:
 
             return result
 
+    def get_routes_for_stop(self, zip_path: Path, stop_id: str) -> set[str]:
+        """Get the routes whose scheduled trips call at a stop.
+
+        Args:
+            zip_path: Path to GTFS ZIP file.
+            stop_id: Stop ID, with or without direction suffix (e.g. 'A21S' or 'A21').
+                With a suffix only that direction matches; without one, both do.
+
+        Returns:
+            Set of route IDs that call at the stop.
+        """
+        # Stored in _route_stops_cache so _invalidate_feed_caches clears it
+        # when a new ZIP is downloaded (key starts with the feed name).
+        cache_key = f"{zip_path.stem}_routes_at_{stop_id}"
+        if cache_key in self._route_stops_cache:
+            cache_time = self._cache_timestamps.get(cache_key)
+            if cache_time and (datetime.now() - cache_time) < timedelta(hours=self.ttl_hours):
+                return self._route_stops_cache[cache_key]
+
+        has_suffix = stop_id.endswith(("N", "S"))
+        base_id = stop_id[:-1] if has_suffix else stop_id
+
+        def matches(candidate: str) -> bool:
+            if has_suffix:
+                return candidate == stop_id
+            return candidate == base_id or (
+                candidate[:-1] == base_id and candidate.endswith(("N", "S"))
+            )
+
+        trip_ids: set[str] = set()
+        routes: set[str] = set()
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            with zf.open('stop_times.txt') as f:
+                reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8-sig'))
+                for row in reader:
+                    if matches(row['stop_id']):
+                        trip_ids.add(row['trip_id'])
+
+            if trip_ids:
+                with zf.open('trips.txt') as f:
+                    reader = csv.DictReader(io.TextIOWrapper(f, encoding='utf-8-sig'))
+                    for row in reader:
+                        if row['trip_id'] in trip_ids:
+                            routes.add(row['route_id'])
+
+        self._route_stops_cache[cache_key] = routes
+        self._cache_timestamps[cache_key] = datetime.now()
+        return routes
+
+
     def get_stop_names(self, zip_path: Path) -> dict[str, str]:
         """Get a mapping of stop_id to stop_name from GTFS ZIP.
 
