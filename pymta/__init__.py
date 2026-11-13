@@ -1,5 +1,7 @@
 """py-nymta library for accessing NYC transit real-time data."""
 
+import asyncio
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -392,6 +394,75 @@ class SubwayFeed:
             )
         return LINE_TO_FEED[route_id]
 
+    @staticmethod
+    def get_feed_ids_for_routes(route_ids: Iterable[str]):
+        """Get the sorted feed IDs that carry the given routes.
+
+        Routes not in LINE_TO_FEED are skipped.
+        """
+        return sorted({LINE_TO_FEED[r] for r in route_ids if r in LINE_TO_FEED})
+
+    @staticmethod
+    async def get_feed_ids_for_stop(
+        stop_id: str,
+        *,
+        session: aiohttp.ClientSession,
+        gtfs_cache: Optional[GTFSCache] = None,
+        timeout: int = 30,
+    ) -> list[str]:
+        """Get the feed IDs to read for all routes scheduled at a stop.
+
+        Raises:
+            MTAFeedError: If static GTFS data cannot be fetched or parsed.
+        """
+        cache = gtfs_cache or GTFSCache()
+        try:
+            zip_path = await cache.download_gtfs(
+                url=STATIC_GTFS_URLS["subway"],
+                feed_name="subway",
+                session=session,
+                timeout=timeout,
+            )
+            # Parsing stop_times.txt is slow; keep it off the event loop.
+            routes = await asyncio.to_thread(
+                cache.get_routes_for_stop, zip_path, stop_id
+            )
+        except Exception as err:
+            raise MTAFeedError(f"Error fetching static GTFS data: {err}") from err
+        return SubwayFeed.get_feed_ids_for_routes(routes)
+
+    @staticmethod
+    async def get_stop_arrivals(stop_id: str, feed_ids: list[str], *, session: aiohttp.ClientSession,
+                                gtfs_cache: Optional[GTFSCache] = None, max_arrivals: int = 3,
+                                timeout: int = 30) -> list[Arrival]:
+        """Get upcoming arrivals for every route at a stop, across several feeds.
+
+        Args:
+            stop_id: The stop ID including direction (e.g., 'A21S').
+            feed_ids: Subway feeds to read (e.g., ['A', 'B']), usually from
+                get_feed_ids_for_stop().
+            session: aiohttp ClientSession shared by all feed requests.
+            gtfs_cache: Optional GTFSCache shared by all feeds.
+            max_arrivals: Maximum number of arrivals to return (default: 3).
+            timeout: Request timeout in seconds (default: 30).
+
+        Returns:
+            List of Arrival objects from all feeds, sorted by arrival time.
+
+        Raises:
+            MTAFeedError: If any feed cannot be fetched or parsed.
+        """
+        cache = gtfs_cache or GTFSCache()
+        feeds = [
+            SubwayFeed(feed_id=f, timeout=timeout, session=session, gtfs_cache=cache)
+            for f in feed_ids
+        ]
+        results = await asyncio.gather(
+            *(feed.get_arrivals(None, stop_id, max_arrivals) for feed in feeds)
+        )
+        arrivals = [a for result in results for a in result]
+        arrivals.sort()
+        return arrivals[:max_arrivals]
 
 class BusFeed:
     """Interface for MTA bus real-time feeds."""
