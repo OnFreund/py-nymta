@@ -546,3 +546,27 @@ async def test_get_stops_route_not_found():
 
     # All six feeds (five NYCT boroughs + MTA Bus Company) should be searched
     assert mock_cache.download_gtfs.call_count == 6
+
+@pytest.mark.asyncio
+async def test_get_arrivals_no_route_returns_all_routes(
+    make_feed, mock_session, bus_cache
+) -> None:
+    """With no route filter, every route at the stop is returned, sorted by
+    time; other stops are excluded, and each fallback destination names the
+    trip's own route.
+    """
+    content = make_feed(
+        [
+            ("M15", [("400561", 300)]),
+            ("M34", [("400561", 120)]),
+            ("M15", [("400999", 60)]),  # different stop: must not appear
+        ]
+    )
+    feed = BusFeed(
+        api_key="test_key", session=mock_session(content), gtfs_cache=bus_cache()
+    )
+
+    arrivals = await feed.get_arrivals(None, "400561")
+
+    assert [a.route_id for a in arrivals] == ["M34", "M15"]
+    assert [a.destination for a in arrivals] == ["M34 bus", "M15 bus"]
