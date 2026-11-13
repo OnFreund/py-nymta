@@ -199,6 +199,25 @@ async def test_get_arrivals_filters_by_route(make_feed, mock_session, subway_cac
     assert len(arrivals) == 1
     assert arrivals[0].route_id == "Q"
 
+@pytest.mark.asyncio
+async def test_get_arrivals_without_filters_by_route(make_feed, mock_session, subway_cache):
+    """Test that all arrivals are returned when no route_id is specified."""
+    content = make_feed(
+        [
+            ("Q", [("B08S", 300)]),
+            ("R", [("B08S", 600)]),
+        ]
+    )
+    feed = SubwayFeed(
+        feed_id="N", session=mock_session(content), gtfs_cache=subway_cache()
+    )
+
+    arrivals = await feed.get_arrivals(route_id=None, stop_id="B08S")
+
+    assert len(arrivals) == 2
+    assert arrivals[0].route_id == "Q"
+    assert arrivals[1].route_id == "R"
+
 
 @pytest.mark.asyncio
 async def test_get_arrivals_max_arrivals():
